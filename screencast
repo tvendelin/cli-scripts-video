@@ -1,0 +1,51 @@
+#!/bin/bash
+
+read -d ''  USAGE <<EOI
+
+screencast
+
+Records a video of your screen 
+at its native resolution at 30 fps.
+
+If recording with audio, 
+and space is not a concern,
+run with -l option.
+
+Usage:
+    $0 [-a] <output file>
+
+Options:
+    -a Record audio from the default device
+    -l Lossless recording
+EOI
+
+exit_with_error(){
+    echo "$1"
+    echo "$USAGE"
+}
+
+while getopts 'alh' name;  do
+    case "$name" in
+        a)
+            AUDIO='-f alsa  -i default -preset veryfast'
+            ;;
+        l)
+            LOSSLESS="-crf 0"
+            ;;
+        h)
+            echo "$USAGE" && exit 0
+    esac
+done            
+
+shift $((OPTIND - 1))
+
+if [[ $# -ne 1 ]] ; then
+    exit_with_error "illegal number of arguments"
+fi
+
+OUTFILE="$1"
+
+
+echo "$AUDIO $OUTFILE"
+
+ffmpeg -f x11grab -framerate 30 -i :0.0 $AUDIO $LOSSLESS $OUTFILE
