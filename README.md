@@ -22,3 +22,7 @@ Tested on Sony RX100M7.
 Record a video of your screen, optionally with audio and without lagging. Requierments:
 
 - `ffmpeg`
+
+## `pause_ffmpeg`
+
+Pause or resume running `ffmpeg` process. Useful with associated key binding.

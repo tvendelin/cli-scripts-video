@@ -48,4 +48,4 @@ OUTFILE="$1"
 
 echo "$AUDIO $OUTFILE"
 
-ffmpeg -f x11grab -framerate 30 -i :0.0 $AUDIO $LOSSLESS $OUTFILE
+ffmpeg -f x11grab -framerate 30 -probesize 100M -i :0.0 $AUDIO $LOSSLESS $OUTFILE
