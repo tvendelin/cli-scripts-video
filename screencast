@@ -1,50 +1,65 @@
-#!/bin/bash
+#!/bin/bash -x
 
-read -d ''  USAGE <<EOI
+read -d '' USAGE <<EOI
 
 screencast
 
-Records a video of your screen 
+Records a video of your screen
 at its native resolution at 30 fps.
 
-If recording with audio, 
+If recording with audio,
 and space is not a concern,
 run with -l option.
 
+The recording is stored in zero-padded,
+serialized files, like 00006.mp4
+
 Usage:
-    $0 [-a] <output file>
+    $0 [-a] <output directory>
 
 Options:
     -a Record audio from the default device
     -l Lossless recording
 EOI
 
-exit_with_error(){
-    echo "$1"
-    echo "$USAGE"
+exit_with_error() {
+	echo "$1"
+	echo "$USAGE"
 }
 
-while getopts 'alh' name;  do
-    case "$name" in
-        a)
-            AUDIO='-f alsa  -i default -preset veryfast'
-            ;;
-        l)
-            LOSSLESS="-crf 0"
-            ;;
-        h)
-            echo "$USAGE" && exit 0
-    esac
-done            
+next_file() {
+	local RECDIR="$1"
+	N=$(ls -t "$RECDIR" 2>/dev/null | sed '1s/\..*//; q')
+	if [ -z "$N" ]; then
+		N=0
+	fi
+	printf "${RECDIR}/%05d.mp4" $((N + 1))
+}
+
+while getopts 'alh' name; do
+	case "$name" in
+	a)
+		AUDIO='-f alsa  -i default -preset veryfast'
+		;;
+	l)
+		LOSSLESS="-crf 0"
+		;;
+	h)
+		echo "$USAGE" && exit 0
+		;;
+	esac
+done
 
 shift $((OPTIND - 1))
 
-if [[ $# -ne 1 ]] ; then
-    exit_with_error "illegal number of arguments"
+if [[ $# -ne 1 ]]; then
+	exit_with_error "illegal number of arguments"
 fi
 
-OUTFILE="$1"
+RECDIR="$1"
+mkdir -p "$RECDIR"
 
+OUTFILE=$(next_file "$RECDIR")
 
 echo "$AUDIO $OUTFILE"
 
