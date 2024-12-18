@@ -1,34 +1,35 @@
-#!/bin/bash -x
+#!/bin/bash
 
-read -d '' USAGE <<EOI
+read -r -d '' USAGE <<EOI
 
-screencast
+    screencast
 
-Records a video of your screen
-at its native resolution at 30 fps.
+    Records a video of your screen at its native resolution at 30 fps.
 
-If recording with audio,
-and space is not a concern,
-run with -l option.
+    If recording with audio, and space is not a concern,
+    run with -l option.
 
-The recording is stored in zero-padded,
-serialized files, like 00006.mp4
+    The recording is stored in zero-padded, serialized files,
+    like 00006.mp4
 
-Usage:
-    $0 [-a] <output directory>
+    Usage:
+        $0 [-a] <output directory>
 
-Options:
-    -a Record audio from the default device
-    -l Lossless recording
+    Options:
+        -a Record audio from the default device
+        -l Lossless recording
+
 EOI
 
 exit_with_error() {
 	echo "$1"
 	echo "$USAGE"
+	exit 1
 }
 
 next_file() {
 	local RECDIR="$1"
+	# shellcheck disable=SC2012
 	N=$(ls -t "$RECDIR" 2>/dev/null | sed '1s/\..*//; q')
 	if [ -z "$N" ]; then
 		N=0
@@ -36,16 +37,21 @@ next_file() {
 	printf "${RECDIR}/%05d.mp4" $((N + 1))
 }
 
+FFMPEG_OPTIONS=(-f x11grab -framerate 30 -probesize 100M -i :0.0)
+
 while getopts 'alh' name; do
 	case "$name" in
 	a)
-		AUDIO='-f alsa  -i default -preset veryfast'
+		FFMPEG_OPTIONS+=(-f alsa -i default -preset veryfast)
 		;;
 	l)
-		LOSSLESS="-crf 0"
+		FFMPEG_OPTIONS+=(-crf 0)
 		;;
 	h)
 		echo "$USAGE" && exit 0
+		;;
+	*)
+		exit_with_error "Invalid option $name"
 		;;
 	esac
 done
@@ -53,7 +59,7 @@ done
 shift $((OPTIND - 1))
 
 if [[ $# -ne 1 ]]; then
-	exit_with_error "illegal number of arguments"
+	exit_with_error "Illegal number of arguments"
 fi
 
 RECDIR="$1"
@@ -61,6 +67,8 @@ mkdir -p "$RECDIR"
 
 OUTFILE=$(next_file "$RECDIR")
 
-echo "$AUDIO $OUTFILE"
+echo "Recording to: $OUTFILE"
+echo "Using options: ${FFMPEG_OPTIONS[*]}"
 
-ffmpeg -f x11grab -framerate 30 -probesize 100M -i :0.0 $AUDIO $LOSSLESS $OUTFILE
+# Run ffmpeg with the options array
+ffmpeg "${FFMPEG_OPTIONS[@]}" "$OUTFILE"
