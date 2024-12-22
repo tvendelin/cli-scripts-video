@@ -61,4 +61,4 @@ OUTFILE=$(next_file "$RECDIR")
 echo "Recording to: $OUTFILE"
 echo "Using device: $INPUT_DEV"
 
-ffmpeg -f alsa -channels 1 -ar 48000 -i "$INPUT_DEV" -af "pan=stereo|c0=c0|c1=c0" "$OUTFILE"
+ffmpeg -f alsa -channels 1 -use_wallclock_as_timestamps 1 -ar 48000 -i "$INPUT_DEV" -af "pan=stereo|c0=c0|c1=c0" "$OUTFILE"
