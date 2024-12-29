@@ -45,9 +45,11 @@ The external audio must already be trimmed to the mentioned clap.
 
 ### Options:
 
--v   Camera recording with audio in MP4 format (required).
--a   Externally supplied audio in WAV format (already trimmed to the clap, required).
--o   Final output as MP4, trimmed to the clap, with the original audio replaced with the external audio (required).
--t   Temporary directory for intermediate files (optional, defaults to /tmp/declaps/<original MP4 stem name>).
--q   Quiet mode. Suppresses progress messages.
--h   Display this help message.
+```
+    -v   Camera recording with audio in MP4 format (required).
+    -a   Externally supplied audio in WAV format (already trimmed to the clap, required).
+    -o   Final output as MP4, trimmed to the clap, with the original audio replaced with the external audio (required).
+    -t   Temporary directory for intermediate files (optional, defaults to /tmp/declaps/<original MP4 stem name>).
+    -q   Quiet mode. Suppresses progress messages.
+    -h   Display this help message.
+```
