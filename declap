@@ -1,0 +1,104 @@
+#!/bin/bash
+
+# Get the duration of a media file
+duration() {
+	ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$1"
+}
+
+# Function to print usage information
+print_usage() {
+	cat <<EOF
+
+    Usage: $0 [-v camera recording (MP4)] [-a external audio (WAV)] [-o output (MP4)] [-t temp directory] [-q] [-h]
+
+    The script aims to produce a video replacing original (low quality) embedded audio
+    with an externally recorded audio track, synchronized.
+
+    Both audio streams should have a loud clap or similar synchronization point
+    at the beginning.
+
+    The external audio must already be trimmed to the mentioned clap.
+
+    Options:
+    -v   Camera recording with audio in MP4 format (required).
+    -a   Externally supplied audio in WAV format (already trimmed to the clap, required).
+    -o   Final output as MP4, trimmed to the clap, with the original audio replaced with the external audio (required).
+    -t   Temporary directory for intermediate files (optional, defaults to /tmp/declaps/<original MP4 stem name>).
+    -q   Quiet mode. Suppresses progress messages.
+    -h   Display this help message.
+EOF
+}
+
+error_exit() {
+	echo "Error: $1" >&2
+	print_usage
+	exit 1
+}
+
+# Default temporary directory and quiet flag
+TEMP_DIR="/tmp/declaps"
+QUIET="false"
+
+# Parse input options
+while getopts ":v:a:o:t:qh" opt; do
+	case "$opt" in
+	v) VIDEO_IN="$OPTARG" ;;
+	a) AUDIO_IN="$OPTARG" ;;
+	o) OUTPUT="$OPTARG" ;;
+	t) TEMP_DIR="$OPTARG" ;;
+	q) QUIET="true" ;;
+	h)
+		print_usage
+		exit 0
+		;;
+	*) error_exit "Invalid option -$OPTARG." ;;
+	esac
+done
+
+# Check required inputs
+if [ -z "$VIDEO_IN" ] || [ -z "$AUDIO_IN" ] || [ -z "$OUTPUT" ]; then
+	error_exit "Missing required arguments."
+fi
+
+# Create temporary directory based on video file name stem if needed
+VIDEO_STEM=$(basename "$VIDEO_IN" .mp4)
+TEMP_DIR="$TEMP_DIR/$VIDEO_STEM"
+mkdir -p "$TEMP_DIR"
+
+# Function to log messages based on quiet mode
+log_message() {
+	if [ "$QUIET" = "false" ]; then
+		echo "$1"
+	fi
+}
+
+# Extract audio from the video
+log_message "Extracting audio from video..."
+ffmpeg -i "$VIDEO_IN" -vn -acodec pcm_s16le -ar 44100 -ac 2 "$TEMP_DIR/extracted.wav"
+
+# Trim the silence from the beginning of the extracted audio
+log_message "Trimming silence from video audio..."
+sox "$TEMP_DIR/extracted.wav" "$TEMP_DIR/extracted_tr.wav" silence 1 0.1 -30db
+
+# Trim the silence from the beginning of the external audio (already trimmed to the clap)
+log_message "Trimming silence from external audio..."
+sox "$AUDIO_IN" "$TEMP_DIR/audio_ext_tr.wav" silence 1 0.1 -30db
+
+# Calculate the time difference for trimming the video (based on the difference between the extracted and trimmed audio)
+EXTRACTED_DURATION=$(duration "$TEMP_DIR/extracted.wav")
+TRIMMED_DURATION=$(duration "$TEMP_DIR/extracted_tr.wav")
+TRIM=$(echo "$EXTRACTED_DURATION - $TRIMMED_DURATION" | bc -l)
+
+# Trim the video based on the calculated duration
+log_message "Trimming video to synchronize with audio..."
+ffmpeg -i "$VIDEO_IN" -ss "$TRIM" -c:v copy -c:a copy "$TEMP_DIR/trimmed.mp4"
+
+# Replace the audio in the video with the external trimmed audio
+log_message "Replacing audio in the video with the external audio..."
+ffmpeg -i "$TEMP_DIR/trimmed.mp4" -i "$TEMP_DIR/audio_ext_tr.wav" -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 "$OUTPUT"
+
+# Cleanup temporary files
+log_message "Cleaning up temporary files..."
+rm -r "$TEMP_DIR"
+
+log_message "Process completed! Final video saved to $OUTPUT."
