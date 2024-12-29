@@ -1,6 +1,6 @@
 #!/bin/bash
 
-INPUT_DEV='default:CARD=H5'
+INPUT_DEV='sysdefault:CARD=H5'
 
 read -r -d '' USAGE <<EOI
 
