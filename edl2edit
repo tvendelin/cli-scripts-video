@@ -1,0 +1,88 @@
+#!/bin/bash
+set -euo pipefail
+
+show_help() {
+	cat <<EOF
+
+    Usage: $0 [-h] [-k] [-o OUTPUT] EDL_FILE
+
+    Cut one or more MP4 files according to EDL, then assembly
+    the resulting clips into a new MP4 file.
+
+    If the EDL file name is NAME.edl, the output will be NAME-edl.MP4
+
+    Options:
+      -h             Show this help message and exit
+      -k             Keep the temporary directory with chunks
+
+    Arguments:
+      EDL_FILE       The input EDL file specifying the cut selections.
+        The file must be compliant with mpv's EDL format:
+
+            # mpv EDL v0
+            FILE,start,length,end
+
+        The fourth field is a customization andrepresents the end of the clip.
+
+EOF
+}
+
+error() {
+	echo "$1" >&2
+	show_help
+	exit 1
+}
+
+# Parse options
+while getopts ":hko:" opt; do
+	case "$opt" in
+	h)
+		show_help
+		exit 0
+		;;
+	k)
+		KEEP_TEMP=1
+		;;
+	?)
+		echo "Invalid option: -$OPTARG" >&2
+		show_help >&2
+		exit 1
+		;;
+	esac
+done
+shift $((OPTIND - 1))
+
+# Validate EDL file
+if [ $# -ne 1 ]; then
+	error "Error: EDL file must be specified."
+fi
+
+EDL_FILE="$1"
+
+if [ ! -f "$EDL_FILE" ]; then
+	error "Error: EDL file '$EDL_FILE' does not exist."
+fi
+
+sed -n '/ASCII text$/q1' <<<"$(file "$EDL_FILE")" && error "Expecting ASCII file"
+
+TMPDIR="tmp/$EDL_FILE"
+CLIPS="$TMPDIR/${EDL_FILE/.edl/-clips.txt}"
+CONCAT_OUTFILE="${EDL_FILE/.edl/-edl}.MP4"
+
+[ -d "$TMPDIR" ] && rm -r "$TMPDIR"
+
+mkdir -p "$TMPDIR"
+N=1
+
+sed -n '/^#/d; s/,/ /gp' "$EDL_FILE" | while read -r FILE IN _ OUT; do
+	OUTFILE="${FILE/.MP4/-"$N".MP4}"
+	ffmpeg -nostdin -i "$FILE" -ss "$IN" -to "$OUT" -c copy "$TMPDIR/$OUTFILE"
+	N=$((N + 1))
+	echo "file '$OUTFILE'" >>"$CLIPS"
+done
+
+ffmpeg -f concat -i "$CLIPS" "$CONCAT_OUTFILE"
+
+if [ -z ${KEEP_TEMP+x} ]; then
+	rm -rf "$TMPDIR"
+fi
