@@ -1,0 +1,5 @@
+#!/bin/bash
+SD=$(ls /dev/sd* | sort -r | sed 1q)
+sudo mount "$SD" /mnt
+mkdir -p video
+find /mnt -iname '*.mp4' -exec cp -n '{}' video/ \;
