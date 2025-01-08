@@ -2,16 +2,16 @@
 
 read -r -d '' USAGE <<EOI
 
-    screencast
+    Usage:
+        $0 [<output directory>]
 
     Records a video of your screen at its native resolution at 29.97 fps.
 
     The recording is stored in zero-padded, serialized files,
     like 00006.mp4
 
-    Usage:
-        $0 <output directory>
-
+    The <output directory>, if not provided, defaults to \$TERM_RECORDING
+    If the variable is empty, "$HOME/terminal_recordings" will be created.
 
 EOI
 
@@ -56,14 +56,14 @@ done
 shift $((OPTIND - 1))
 
 if [[ $# -eq 1 ]]; then
-	RECDIR="$1"
-else
-	RECDIR='trecordings'
+	TERM_RECORDING="$1"
+elif [ -z ${TERM_RECORDING+x} ]; then
+	TERM_RECORDING="$HOME/terminal_recordings"
 fi
 
-mkdir -p "$RECDIR"
+mkdir -p "$TERM_RECORDING"
 
-OUTFILE=$(next_file "$RECDIR")
+OUTFILE=$(next_file "$TERM_RECORDING")
 
 if [ -z ${DEBUG+x} ]; then
 	FFMPEG_OPTIONS+=(-hide_banner -loglevel error)
