@@ -15,6 +15,7 @@ read -r -d '' USAGE <<EOI
 
 EOI
 
+# Are we recording already?
 if pgrep ffmpeg; then
 	exit 0
 fi
