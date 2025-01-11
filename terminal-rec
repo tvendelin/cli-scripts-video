@@ -10,7 +10,8 @@ read -r -d '' USAGE <<EOI
     The recording is stored in zero-padded, serialized files,
     like 00006.mp4
 
-    The <output directory>, if not provided, defaults to \$TERM_RECORDING
+    The <output directory>, if not provided, defaults to the first line 
+    of "$HOME/.termrec", then \$TERM_RECORDING
     If the variable is empty, "$HOME/terminal_recordings" will be created.
 
 EOI
@@ -58,6 +59,8 @@ shift $((OPTIND - 1))
 
 if [[ $# -eq 1 ]]; then
 	TERM_RECORDING="$1"
+elif [ -f "$HOME/.termrec" ]; then
+    TERM_RECORDING="$(sed '1q'  "$HOME/.termrec")"
 elif [ -z ${TERM_RECORDING+x} ]; then
 	TERM_RECORDING="$HOME/terminal_recordings"
 fi
