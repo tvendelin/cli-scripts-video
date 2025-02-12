@@ -1,0 +1,107 @@
+#!/bin/bash -ex
+
+# Get the duration of a media file
+duration() {
+    ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$1"
+}
+
+# Function to print usage information
+print_usage() {
+    cat <<EOF
+
+    Usage: $0 -v <camera recording> -a <audio> -s <screen recording> -o <output directory> [-q] [-h]
+
+    The script aims to synchronize 2 videos and audio, specifically:
+    - a video recording with a probably lower quality audio track ("Talking head", typically)
+    - an audio, synchonizable with the "Talking head" with a clap preceded by "silence"
+    - a screen recording, already synchronized with audio (simultaneously started, typically)
+
+    All three tracks are trimmed to one second past the clap, and saved in output directory.
+    The output directory is created by the script, and must not exist.
+
+    No transcoding takes place.
+
+    Options:
+    -v   Camera recording with audio (required).
+    -a   Externally supplied audio in WAV format (already trimmed to the clap, required).
+    -s   A screen recording starting at exact same time as external audio.
+    -o   Output directory
+    -q   Quiet mode. Suppresses progress messages.
+    -h   Display this help message.
+EOF
+}
+
+error_exit() {
+    echo "Error: $1" >&2
+    print_usage
+    exit 1
+}
+
+QUIET="false"
+
+# Parse input options
+while getopts ":v:a:s:o:qh" opt; do
+    case "$opt" in
+    v) VIDEO_IN="$OPTARG" ;;
+    a) AUDIO_IN="$OPTARG" ;;
+    s) SCREEN_IN="$OPTARG" ;;
+    o) OUTPUT="$OPTARG" ;;
+    q) QUIET="true" ;;
+    h)
+        print_usage
+        exit 0
+        ;;
+    *) error_exit "Invalid option -$OPTARG." ;;
+    esac
+done
+
+# Check required inputs
+if [ -z "$VIDEO_IN" ] || [ -z "$AUDIO_IN" ] || [ -z "$SCREEN_IN" ] || [ -z "$OUTPUT" ]; then
+    error_exit "Missing required arguments."
+fi
+
+mkdir "$OUTPUT"
+
+# Function to log messages based on quiet mode
+log_message() {
+    if [ "$QUIET" = "false" ]; then
+        echo "$1"
+    fi
+}
+
+time_diff() {
+    local long short
+    long="$(duration "$1")"
+    short="$(duration "$2")"
+    bc -l <<<"$long - $short"
+}
+
+trim2clap() {
+    sox "$1" "$2" silence 1 0.1 -30db
+}
+
+# Extract audio from the video
+log_message "Extracting audio from video..."
+extracted_audio="$(mktemp).wav"
+ffmpeg -i "$VIDEO_IN" -vn -acodec pcm_s16le -ar 44100 -ac 2 "$extracted_audio"
+
+log_message "Calculating duration difference for video..."
+extracted_audio_trim="$(mktemp).wav"
+trim2clap "$extracted_audio" "$extracted_audio_trim"
+video_start="$(time_diff "$extracted_audio" "$extracted_audio_trim")"
+
+rm "$extracted_audio" "$extracted_audio_trim"
+
+log_message "Trimming audio to clap..."
+AUDIO_TRIMMED="$OUTPUT/$(basename "$AUDIO_IN")"
+trim2clap "$AUDIO_IN" "$AUDIO_TRIMMED"
+
+audio_start=$(time_diff "$AUDIO_IN" "$AUDIO_TRIMMED")
+
+# Trim the video based on the calculated duration
+log_message "Trimming talking head with external audio..."
+#ffmpeg -ss "$video_start" -i "$VIDEO_IN" -i "$AUDIO_TRIMMED" -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -shortest "$OUTPUT/$(basename "$VIDEO_IN")"
+ffmpeg -ss "$video_start" -i "$VIDEO_IN" "$OUTPUT/$(basename "$VIDEO_IN")"
+
+log_message "Trimming screen recording to audio..."
+ffmpeg -ss "$audio_start" -i "$SCREEN_IN" -c:v copy -an "$OUTPUT/$(basename "$SCREEN_IN")"
