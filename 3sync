@@ -101,7 +101,7 @@ audio_start=$(time_diff "$AUDIO_IN" "$AUDIO_TRIMMED")
 # Trim the video based on the calculated duration
 log_message "Trimming talking head with external audio..."
 #ffmpeg -ss "$video_start" -i "$VIDEO_IN" -i "$AUDIO_TRIMMED" -map 0:v:0 -map 1:a:0 -c:v copy -c:a copy -shortest "$OUTPUT/$(basename "$VIDEO_IN")"
-ffmpeg -ss "$video_start" -i "$VIDEO_IN" "$OUTPUT/$(basename "$VIDEO_IN")"
+ffmpeg -ss "$video_start" -i "$VIDEO_IN" -c:v copy -an "$OUTPUT/$(basename "$VIDEO_IN")"
 
 log_message "Trimming screen recording to audio..."
 ffmpeg -ss "$audio_start" -i "$SCREEN_IN" -c:v copy -an "$OUTPUT/$(basename "$SCREEN_IN")"
