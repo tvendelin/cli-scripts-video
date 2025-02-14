@@ -5,6 +5,8 @@ duration() {
     ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$1"
 }
 
+AFTER_CLAP="0.3" # seconds
+
 # Function to print usage information
 print_usage() {
     cat <<EOF
@@ -16,7 +18,7 @@ print_usage() {
     - an audio, synchonizable with the "Talking head" with a clap preceded by "silence"
     - a screen recording, already synchronized with audio (simultaneously started, typically)
 
-    All three tracks are trimmed to one second past the clap, and saved in output directory.
+    All three tracks are trimmed to $AFTER_CLAP second(s) past the clap, and saved in output directory.
     The output directory is created by the script, and must not exist.
 
     No transcoding takes place.
@@ -73,28 +75,72 @@ time_diff() {
     local long short
     long="$(duration "$1")"
     short="$(duration "$2")"
-    bc -l <<<"$long - $short"
+    bc -l <<<"$long - $short + $AFTER_CLAP"
 }
 
 trim2clap() {
     sox "$1" "$2" silence 1 0.1 -30db
 }
 
+expecting_n_args() {
+    if [[ $1 -ne $2 ]]; then
+        echo "Wrong number of arguments, expecting $1, got $2"
+        exit 1
+    fi
+}
+
+denoise() {
+    expecting_n_args 1 "$#"
+
+    local IN OUT
+
+    IN="$1"
+    OUT="$(mktemp).wav"
+
+    sox "$IN" -n trim 1 3 noiseprof |
+        sox "$IN" -t wav "$OUT" noisered - && mv "$OUT" "$IN"
+}
+
+lufs_youtube() {
+    expecting_n_args 1 "$#"
+
+    IN="$1"
+    OUT="$(mktemp).wav"
+
+    # First pass
+    MEASURED=$(ffmpeg -i "$IN" -af "loudnorm=print_format=json" -f null - 2>&1 |
+        grep -P 'input_i|input_tp|input_lra|input_thresh' |
+        perl -ne 'm/"input(.+?)"\s+:\s+"(.+?)"/; print ":measured$1=$2"')
+
+    # Actual loudness normalization
+    ffmpeg -i "$IN" -af "loudnorm=i=-14:tp=-1:lra=11$MEASURED" "$OUT" && mv "$OUT" "$IN"
+}
+
+# Main part
+
 # Extract audio from the video
 log_message "Extracting audio from video..."
+
 extracted_audio="$(mktemp).wav"
 ffmpeg -i "$VIDEO_IN" -vn -acodec pcm_s16le -ar 44100 -ac 2 "$extracted_audio"
 
 log_message "Calculating duration difference for video..."
+
 extracted_audio_trim="$(mktemp).wav"
-trim2clap "$extracted_audio" "$extracted_audio_trim"
+sox "$extracted_audio" "$extracted_audio_trim" silence 1 0.1 -30db
 video_start="$(time_diff "$extracted_audio" "$extracted_audio_trim")"
 
 rm "$extracted_audio" "$extracted_audio_trim"
 
+log_message "Denoising audio..."
+denoise "$AUDIO_IN"
+
 log_message "Trimming audio to clap..."
+
 AUDIO_TRIMMED="$OUTPUT/$(basename "$AUDIO_IN")"
-trim2clap "$AUDIO_IN" "$AUDIO_TRIMMED"
+sox "$AUDIO_IN" "$AUDIO_TRIMMED" silence 1 0.1 -30db trim "$AFTER_CLAP" # norm -0.6
+lufs_youtube "$AUDIO_TRIMMED"
+
 
 audio_start=$(time_diff "$AUDIO_IN" "$AUDIO_TRIMMED")
 
