@@ -1,43 +1,99 @@
-#!/bin/bash
+#!/bin/bash -ex
 
-expecting_n_args() {
-	if [[ $1 -ne $2 ]]; then
-		echo "Wrong number of arguments, expecting $1, got $2"
-		exit 1
-	fi
+# processing parameters
+NPROF_START="1" # sec
+NPROF_END="3"   # sec
+NORM_LEVEL="-3" # dB
+SILENCE_THRESHOLD="-30d"
+
+# defaults
+DENOISE=false
+TRIM_SILENCE=false
+NORMALIZE=false
+
+usage() {
+    cat <<EOU
+
+    Usage: $0 -a <audio_in> -o <audio_out>
+
+    Process <audio_in> (normalization, loudness profiling)
+    and save into <audio_out>
+
+EOU
 }
 
-processed_file_name() {
-	expecting_n_args 1 "$#"
-	OUTDIR="$(dirname "$1")/ready"
-    mkdir -p "$OUTDIR"
-    echo "$OUTDIR/$(basename "$1")"
+error_exit() {
+    echo "Error: $1" >&2
+    print_usage
+    exit 1
+}
+
+expecting_n_args() {
+    if [[ $1 -ne $2 ]]; then
+        echo "Wrong number of arguments, expecting $1, got $2 in $3"
+        exit 1
+    fi
+}
+
+while getopts ":a:o:idtnqh" opt; do
+    case "$opt" in
+    a) INPUT="$OPTARG" ;;
+    o) OUTPUT="$OPTARG" ;;
+    d) DENOISE=true ;;
+    t) TRIM_SILENCE=true ;;
+        #    q) QUIET=true ;;
+    h)
+        usage
+        exit 0
+        ;;
+    *) error_exit "Invalid option -$OPTARG." ;;
+    esac
+done
+
+if [ -z "$INPUT" ] || [ -z "$OUTPUT" ]; then
+    error_exit "Missing required arguments."
+fi
+
+mkdir "$OUTPUT"
+IN="$INPUT"
+
+processed_name() {
+    local suffix="$1"
+    echo "${OUTPUT}/$(basename "$INPUT" .wav)_${suffix}.wav"
 }
 
 lufs_youtube() {
-	expecting_n_args 1 "$#"
+    expecting_n_args 1 "$#"
 
-	IN="$1"
-	OUT="$1_$(date '+%s')"
+    IN="$1"
+    OUT="$(processed_name "lufs")"
 
-	# First pass
-	MEASURED=$(ffmpeg -i "$IN" -af "loudnorm=print_format=json" -f null - 2>&1 |
-		grep -P 'input_i|input_tp|input_lra|input_thresh' |
-		perl -ne 'm/"input(.+?)"\s+:\s+"(.+?)"/; print ":measured$1=$2"')
+    # First pass
+    MEASURED=$(ffmpeg -i "$IN" -af "loudnorm=print_format=json" -f null - 2>&1 |
+        grep -P 'input_i|input_tp|input_lra|input_thresh' |
+        perl -ne 'm/"input(.+?)"\s+:\s+"(.+?)"/; print ":measured$1=$2"')
 
-	# Actual loudness normalization
-	ffmpeg -i "$IN" -af "loudnorm=i=-14:tp=-1:lra=11$MEASURED" "$OUT" && mv "$OUT" "$IN"
+    # Actual loudness normalization
+    ffmpeg -i "$IN" -af "loudnorm=i=-14:tp=-3:lra=2$MEASURED" "$OUT" 
 }
 
-denoise_norm() {
-	expecting_n_args 2 "$#"
+out="$(mktemp).wav"
 
-	IN="$1"
-	OUT="$2"
+sox "$IN" "$out" compand 0.01,0.1 -inf,-34.1,-inf,-34,-34 0 -90 0.1
+IN="$out"
+out=
 
-	sox "$IN" -n trim 0 5 noiseprof |
-		sox "$IN" -t wav "$OUT" noisered - 0.3 silence 1 0.1 -50d norm -0.1
-}
+if $DENOISE; then
+    out="$(processed_name "denoised")"
+    sox "$INPUT" -n trim "$NPROF_START" "$NPROF_END" noiseprof | sox "$INPUT" -t wav "$out" noisered -
+fi
 
-OUTFILE=$(processed_file_name "$1")
-denoise_norm "$1" "$OUTFILE"
+if $TRIM_SILENCE; then
+    tmp="$(mktemp).wav"
+    sox "$IN" "$tmp" silence 1 0.1 "$SILENCE_THRESHOLD" && mv "$tmp" "$out"
+fi
+
+
+lufs_youtube "$IN"
+
+# ffmpeg -i script_lra6.wav -af "silenceremove=start_periods=1:start_duration=0.1:start_threshold=-50dB:start_silence=1:stop_periods=-1:stop_duration=0.1:stop_threshold=-50dB" silence.wav
