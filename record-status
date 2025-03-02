@@ -1,7 +1,8 @@
 #!/bin/dash
-if pgrep ffmpeg > /dev/null; then
-    echo " 🔴 "  # Unicode red dot
+if pgrep -f 'ffmpeg -f x11grab' >/dev/null && pgrep -f 'ffmpeg -f alsa' >/dev/null; then
+    echo " 🔴 " # Unicode red dot
+elif pgrep ffmpeg >/dev/null; then
+    echo " ffmpeg "
 else
-    echo " "  # Optional: Unicode white dot or other symbol
+    echo " " # Optional: Unicode white dot or other symbol
 fi
-
