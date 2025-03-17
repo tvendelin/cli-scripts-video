@@ -32,7 +32,7 @@ exit_with_error() {
 next_file() {
     local RECDIR="$1"
     # shellcheck disable=SC2012
-    N=$(ls -t "$RECDIR" 2>/dev/null | sed '1s/\..*//; q')
+    N=$(ls "$RECDIR" 2>/dev/null | sed 's/^0*\([0-9]*\).*/\1/' | sort -rn | sed '1q')
     if [ -z "$N" ]; then
         N=0
     fi

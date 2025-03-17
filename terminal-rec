@@ -19,50 +19,50 @@ EOI
 
 # Are we recording already?
 if pgrep ffmpeg; then
-    exit 0
+	exit 0
 fi
 
 exit_with_error() {
-    echo "$1"
-    echo "$USAGE"
-    exit 1
+	echo "$1"
+	echo "$USAGE"
+	exit 1
 }
 
 next_file() {
-    local RECDIR="$1"
-    # shellcheck disable=SC2012
-    N=$(ls -t "$RECDIR" 2>/dev/null | sed '1s/\..*//; q')
-    if [ -z "$N" ]; then
-        N=0
-    fi
-    printf "${RECDIR}/%05d.mp4" "$((N + 1))"
+	local RECDIR="$1"
+	# shellcheck disable=SC2012
+	N=$(ls "$RECDIR" 2>/dev/null | sed 's/^0*\([0-9]*\).*/\1/' | sort -rn | sed '1q')
+	if [ -z "$N" ]; then
+		N=0
+	fi
+	printf "${RECDIR}/%05d.mp4" "$((N + 1))"
 }
 
 FFMPEG_OPTIONS=(-f x11grab -framerate 29.97 -i :0.0)
 
 while getopts 'dh' name; do
-    case "$name" in
-    d)
-        DEBUG=1
-        ;;
+	case "$name" in
+	d)
+		DEBUG=1
+		;;
 
-    h)
-        echo "$USAGE" && exit 0
-        ;;
-    *)
-        exit_with_error "Invalid option $name"
-        ;;
-    esac
+	h)
+		echo "$USAGE" && exit 0
+		;;
+	*)
+		exit_with_error "Invalid option $name"
+		;;
+	esac
 done
 
 shift $((OPTIND - 1))
 
 if [[ $# -eq 1 ]]; then
-    TERM_RECORDING="$1"
+	TERM_RECORDING="$1"
 elif [ -f "$HOME/.termrec" ]; then
-    TERM_RECORDING="$(sed '1q' "$HOME/.termrec")"
+	TERM_RECORDING="$(sed '1q' "$HOME/.termrec")"
 elif [ -z ${TERM_RECORDING+x} ]; then
-    TERM_RECORDING="$HOME/terminal_recordings"
+	TERM_RECORDING="$HOME/terminal_recordings"
 fi
 
 mkdir -p "$TERM_RECORDING"
@@ -70,10 +70,10 @@ mkdir -p "$TERM_RECORDING"
 OUTFILE=$(next_file "$TERM_RECORDING")
 
 if [ -z ${DEBUG+x} ]; then
-    FFMPEG_OPTIONS+=(-hide_banner -loglevel error)
+	FFMPEG_OPTIONS+=(-hide_banner -loglevel error)
 else
-    echo "Recording to: $OUTFILE"
-    echo "Using options: ${FFMPEG_OPTIONS[*]}"
+	echo "Recording to: $OUTFILE"
+	echo "Using options: ${FFMPEG_OPTIONS[*]}"
 fi
 
 # Run ffmpeg with the options array
